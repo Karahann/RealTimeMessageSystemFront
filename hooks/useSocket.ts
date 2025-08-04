@@ -36,7 +36,7 @@ interface UseSocketReturn {
 
 export const useSocket = ({
   token,
-  serverUrl = "http://localhost:3000",
+  serverUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:3000",
 }: UseSocketProps): UseSocketReturn => {
   const [socket, setSocket] = useState<Socket | null>(null);
   const [isConnected, setIsConnected] = useState(false);
@@ -89,8 +89,8 @@ export const useSocket = ({
           ) {
             // If response is wrapped in data object
             onlineUsers =
-              onlineUsersResponse.onlineUsers ||
-              onlineUsersResponse.data ||
+              (onlineUsersResponse as any).onlineUsers ||
+              (onlineUsersResponse as any).data ||
               onlineUsersResponse;
             console.log(
               "useSocket: Extracted from wrapped response:",
@@ -101,7 +101,7 @@ export const useSocket = ({
           if (Array.isArray(onlineUsers)) {
             // Extract user IDs from the response
             const onlineUserIds = onlineUsers
-              .map((user) => {
+              .map((user: any) => {
                 console.log("useSocket: Processing user:", user);
                 return user.userId || user.id || user;
               })
@@ -119,7 +119,7 @@ export const useSocket = ({
           );
           console.error(
             "useSocket: Error details:",
-            error.response?.data || error.message
+            (error as any)?.response?.data || (error as any)?.message
           );
           // Continue without initial online users - they'll be updated via socket events
         }
