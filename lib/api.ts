@@ -1,7 +1,8 @@
 import axios, { AxiosInstance, AxiosResponse } from "axios";
 
-// API Base URL
-const API_BASE_URL = "http://localhost:3000/api";
+// API Base URL - Environment değişkeninden çek, yoksa localhost kullan
+const API_BASE_URL =
+  process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:3000/api";
 
 // Create axios instance
 const api: AxiosInstance = axios.create({
