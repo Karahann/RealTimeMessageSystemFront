@@ -57,15 +57,21 @@ export const useSocket = ({
   const socketRef = useRef<Socket | null>(null);
 
   useEffect(() => {
+    // Clean up any existing socket first to prevent multiple connections
+    if (socketRef.current) {
+      console.log(
+        "useSocket: Cleaning up existing socket before creating new one"
+      );
+      socketRef.current.removeAllListeners();
+      socketRef.current.disconnect();
+      socketRef.current = null;
+      setSocket(null);
+      setIsConnected(false);
+      setOnlineUsers([]);
+    }
+
     if (!token) {
-      // Disconnect if no token
-      if (socketRef.current) {
-        socketRef.current.disconnect();
-        socketRef.current = null;
-        setSocket(null);
-        setIsConnected(false);
-        setOnlineUsers([]);
-      }
+      console.log("useSocket: No token, skipping socket connection");
       return;
     }
 
@@ -82,11 +88,13 @@ export const useSocket = ({
       },
       autoConnect: true,
       timeout: 20000,
-      forceNew: true, // Force new connection to avoid session issues
+      forceNew: false, // Allow socket reuse when possible
       reconnection: true,
       reconnectionAttempts: 5,
       reconnectionDelay: 2000,
       reconnectionDelayMax: 10000,
+      upgrade: true,
+      rememberUpgrade: true,
     });
 
     socketRef.current = newSocket;
@@ -159,8 +167,8 @@ export const useSocket = ({
       console.error("Socket connection error:", {
         error: error,
         message: error.message,
-        type: error.type,
-        description: error.description,
+        type: (error as any)?.type || "unknown",
+        description: (error as any)?.description || "no description",
         serverUrl,
         authToken: token ? "Present" : "Missing",
       });
@@ -222,6 +230,8 @@ export const useSocket = ({
     // Cleanup on unmount
     return () => {
       if (newSocket) {
+        // Remove all event listeners before disconnecting
+        newSocket.removeAllListeners();
         newSocket.disconnect();
       }
       socketRef.current = null;
@@ -289,10 +299,12 @@ export const useSocket = ({
     [isConnected]
   );
 
-  // Event listeners
+  // Event listeners - remove existing listeners before adding new ones to prevent duplication
   const onMessage = useCallback((callback: (data: SocketMessage) => void) => {
     if (socketRef.current) {
       console.log("useSocket: Setting up message_received listener");
+      // Remove any existing listeners first to prevent duplication
+      socketRef.current.off("message_received");
       socketRef.current.on("message_received", (data) => {
         console.log("useSocket: Received message_received event:", data);
         callback(data);
@@ -303,6 +315,8 @@ export const useSocket = ({
   const onUserOnline = useCallback(
     (callback: (data: SocketUserStatus) => void) => {
       if (socketRef.current) {
+        // Remove any existing listeners first to prevent duplication
+        socketRef.current.off("user_online");
         socketRef.current.on("user_online", callback);
       }
     },
@@ -312,6 +326,8 @@ export const useSocket = ({
   const onUserOffline = useCallback(
     (callback: (data: SocketUserStatus) => void) => {
       if (socketRef.current) {
+        // Remove any existing listeners first to prevent duplication
+        socketRef.current.off("user_offline");
         socketRef.current.on("user_offline", callback);
       }
     },
@@ -320,6 +336,8 @@ export const useSocket = ({
 
   const onUserTyping = useCallback((callback: (data: SocketTyping) => void) => {
     if (socketRef.current) {
+      // Remove any existing listeners first to prevent duplication
+      socketRef.current.off("user_typing");
       socketRef.current.on("user_typing", callback);
     }
   }, []);
@@ -327,6 +345,8 @@ export const useSocket = ({
   const onUserStoppedTyping = useCallback(
     (callback: (data: SocketTyping) => void) => {
       if (socketRef.current) {
+        // Remove any existing listeners first to prevent duplication
+        socketRef.current.off("user_stopped_typing");
         socketRef.current.on("user_stopped_typing", callback);
       }
     },
