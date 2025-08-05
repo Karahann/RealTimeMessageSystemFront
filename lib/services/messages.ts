@@ -21,6 +21,30 @@ export class MessageService {
       const messages = response.data.data?.messages || response.data.data || [];
       const pagination = response.data.pagination || null;
 
+      // Debug pagination extraction
+      console.log("MessageService pagination extraction:", {
+        fullResponse: response.data,
+        extractedPagination: pagination,
+        responsePagination: response.data.pagination,
+        dataStructure: Object.keys(response.data),
+        messagesCount: messages.length,
+        requestedLimit: limit,
+      });
+
+      // Fallback pagination if backend doesn't provide it
+      let finalPagination = pagination;
+      if (!pagination && messages.length > 0) {
+        console.log(
+          "MessageService: No pagination from backend, creating fallback"
+        );
+        finalPagination = {
+          page: page,
+          limit: limit,
+          total: messages.length,
+          pages: messages.length < limit ? page : page + 1, // Assume more pages if we got full limit
+        };
+      }
+
       // Debug: Message order from backend
       console.log("MessageService parsed messages:", {
         count: messages.length,
@@ -42,7 +66,12 @@ export class MessageService {
           : null,
       });
 
-      return { messages, pagination };
+      console.log("MessageService: Final return data:", {
+        messagesCount: messages.length,
+        finalPagination,
+      });
+
+      return { messages, pagination: finalPagination };
     } catch (error) {
       console.error("MessageService getMessages error:", error);
       throw error;

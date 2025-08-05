@@ -16,6 +16,7 @@ interface UseMessagesReturn {
   sendMessage: (content: string) => Promise<void>;
   loadMoreMessages: () => Promise<void>;
   hasMoreMessages: boolean;
+  isAppendingMessages: boolean; // Track if we're appending vs initial load
 }
 
 export const useMessages = ({
@@ -26,7 +27,8 @@ export const useMessages = ({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
-  const [hasMoreMessages, setHasMoreMessages] = useState(true);
+  const [hasMoreMessages, setHasMoreMessages] = useState(true); // Assume more messages initially
+  const [isAppendingMessages, setIsAppendingMessages] = useState(false);
 
   // Debug conversation ID (only when it changes)
   useEffect(() => {
@@ -113,6 +115,12 @@ export const useMessages = ({
         const { messages: newMessages, pagination } =
           await MessageService.getMessages(conversationId, pageNum, 50);
 
+        // Debug pagination info
+        console.log(
+          "useMessages: Raw backend response pagination:",
+          pagination
+        );
+
         // Get current user ID from auth context
         const currentUserId = user?.id || "";
         console.log(
@@ -152,13 +160,60 @@ export const useMessages = ({
 
         if (append) {
           // Pagination için: eski mesajları başa ekle
-          setMessages((prev) => [...sortedMessages, ...prev]);
+          console.log("useMessages: Appending older messages:", {
+            newMessagesCount: sortedMessages.length,
+            existingMessagesCount: messages.length,
+            totalAfterAppend: sortedMessages.length + messages.length,
+          });
+
+          setMessages((prev) => {
+            // Ensure no duplicates by filtering out any messages that already exist
+            const existingIds = new Set(prev.map((msg) => msg.id));
+            const uniqueNewMessages = sortedMessages.filter(
+              (msg) => !existingIds.has(msg.id)
+            );
+
+            console.log("useMessages: Filtered unique messages:", {
+              originalNewCount: sortedMessages.length,
+              uniqueNewCount: uniqueNewMessages.length,
+              filteredOut: sortedMessages.length - uniqueNewMessages.length,
+            });
+
+            return [...uniqueNewMessages, ...prev];
+          });
+
+          // Reset appending flag after append is complete
+          setIsAppendingMessages(false);
         } else {
           // Normal loading: eski → yeni sırada
+          console.log("useMessages: Setting initial messages:", {
+            messagesCount: sortedMessages.length,
+          });
           setMessages(sortedMessages);
+          setIsAppendingMessages(false); // Ensure it's false for initial load
         }
 
-        setHasMoreMessages(pagination && pagination.page < pagination.pages);
+        // Calculate hasMoreMessages with detailed logging and fallback
+        let calculatedHasMore = false;
+
+        if (pagination) {
+          calculatedHasMore = pagination.page < pagination.pages;
+        } else {
+          // Fallback: if we got a full page of messages, assume there might be more
+          calculatedHasMore = newMessages.length >= 50; // Full page size
+        }
+
+        console.log("useMessages: Pagination calculation:", {
+          pagination,
+          currentPage: pagination?.page,
+          totalPages: pagination?.pages,
+          messagesReceived: newMessages.length,
+          hasMoreMessages: calculatedHasMore,
+          pageNum,
+          hasPagination: !!pagination,
+        });
+
+        setHasMoreMessages(calculatedHasMore);
         setPage(pageNum);
       } catch (err: any) {
         console.error("Error loading messages:", err);
@@ -173,7 +228,12 @@ export const useMessages = ({
   // Load more messages (pagination)
   const loadMoreMessages = useCallback(async () => {
     if (!hasMoreMessages || loading) return;
+    console.log(
+      "useMessages: loadMoreMessages called - setting isAppendingMessages to true"
+    );
+    setIsAppendingMessages(true);
     await loadMessages(page + 1, true);
+    // isAppendingMessages will be set to false in loadMessages after append
   }, [hasMoreMessages, loading, page, loadMessages]);
 
   // Send message
@@ -269,8 +329,13 @@ export const useMessages = ({
 
   // Load messages when conversation changes
   useEffect(() => {
+    console.log(
+      "useMessages: Conversation changed, resetting pagination state"
+    );
     setPage(1);
-    setHasMoreMessages(true);
+    setHasMoreMessages(true); // Reset to true for new conversation
+    setMessages([]); // Clear previous messages
+    setIsAppendingMessages(false); // Reset appending flag
     loadMessages(1, false);
   }, [conversationId, loadMessages]);
 
@@ -281,5 +346,6 @@ export const useMessages = ({
     sendMessage,
     loadMoreMessages,
     hasMoreMessages,
+    isAppendingMessages,
   };
 };
