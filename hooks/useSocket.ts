@@ -36,8 +36,20 @@ interface UseSocketReturn {
 
 export const useSocket = ({
   token,
-  serverUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:3000",
+  serverUrl = process.env.NEXT_PUBLIC_BACKEND_URL?.replace("/api", "") ||
+    (typeof window !== "undefined"
+      ? `${window.location.protocol}//${window.location.host}`
+      : "http://localhost:3000"),
 }: UseSocketProps): UseSocketReturn => {
+  // Debug environment variable
+  console.log("Socket Debug - Environment:", {
+    NEXT_PUBLIC_BACKEND_URL: process.env.NEXT_PUBLIC_BACKEND_URL,
+    serverUrl,
+    windowLocation:
+      typeof window !== "undefined"
+        ? `${window.location.protocol}//${window.location.host}`
+        : "N/A",
+  });
   const [socket, setSocket] = useState<Socket | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [onlineUsers, setOnlineUsers] = useState<string[]>([]);
@@ -58,11 +70,23 @@ export const useSocket = ({
     }
 
     // Connect socket
+    console.log("Socket Debug - Connecting with:", {
+      serverUrl,
+      token: token ? `${token.substring(0, 10)}...` : "NO_TOKEN",
+      tokenLength: token?.length || 0,
+    });
+
     const newSocket = io(serverUrl, {
       auth: {
         token: token,
       },
       autoConnect: true,
+      timeout: 20000,
+      forceNew: true, // Force new connection to avoid session issues
+      reconnection: true,
+      reconnectionAttempts: 5,
+      reconnectionDelay: 2000,
+      reconnectionDelayMax: 10000,
     });
 
     socketRef.current = newSocket;
@@ -132,7 +156,23 @@ export const useSocket = ({
     });
 
     newSocket.on("connect_error", (error) => {
-      console.error("Socket connection error:", error);
+      console.error("Socket connection error:", {
+        error: error,
+        message: error.message,
+        type: error.type,
+        description: error.description,
+        serverUrl,
+        authToken: token ? "Present" : "Missing",
+      });
+      setIsConnected(false);
+    });
+
+    newSocket.on("reconnect_error", (error) => {
+      console.error("Socket reconnection error:", error);
+    });
+
+    newSocket.on("reconnect_failed", () => {
+      console.error("Socket failed to reconnect after maximum attempts");
       setIsConnected(false);
     });
 
